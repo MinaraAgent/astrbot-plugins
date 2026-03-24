@@ -13,6 +13,7 @@ import tempfile
 import shutil
 from contextvars import ContextVar
 from pathlib import Path
+from time import monotonic
 from typing import List, Optional
 
 from astrbot.api.event import filter, AstrMessageEvent
@@ -39,6 +40,8 @@ DEFAULT_CONFIG = {
     "analysis_prompt": "Please analyze the content of this video based on the extracted frames. Describe what you see, including any actions, objects, people, or text visible in the frames."
 }
 
+VIDEO_EVENT_CACHE_TTL_SECONDS = 120
+
 
 class VideoVisionPlugin(Star):
     """Plugin that analyzes video attachments using LLM vision capabilities."""
@@ -47,6 +50,7 @@ class VideoVisionPlugin(Star):
         super().__init__(context)
         self.config = {**DEFAULT_CONFIG, **(config or {})}
         self._ffmpeg_available: Optional[bool] = None
+        self._pending_video_cache: dict[str, tuple[float, list[File]]] = {}
         logger.info(f"[VideoVision] Plugin instance created with config: enabled={self.config.get('enabled', True)}")
 
     async def initialize(self):
@@ -134,6 +138,65 @@ class VideoVisionPlugin(Star):
                 video_files.append(msg)
 
         return video_files
+
+    def _build_event_cache_key(self, event: AstrMessageEvent) -> Optional[str]:
+        """Build a stable cache key for bridging related events."""
+        sender_id = (event.get_sender_id() or "").strip()
+        message_text = (event.message_str or "").strip()
+        if not sender_id or not message_text:
+            return None
+        return f"{sender_id}:{message_text}"
+
+    def _clone_video_file(self, video_file: File) -> File:
+        """Clone file metadata so cached entries are isolated from event state."""
+        return File(
+            name=video_file.name or "video.mp4",
+            file=getattr(video_file, "file_", "") or "",
+            url=video_file.url or "",
+        )
+
+    def _prune_pending_video_cache(self) -> None:
+        """Drop stale cached video attachments."""
+        cutoff = monotonic() - VIDEO_EVENT_CACHE_TTL_SECONDS
+        stale_keys = [
+            cache_key
+            for cache_key, (created_at, _) in self._pending_video_cache.items()
+            if created_at < cutoff
+        ]
+        for cache_key in stale_keys:
+            del self._pending_video_cache[cache_key]
+
+    def _cache_video_files(self, event: AstrMessageEvent, video_files: List[File]) -> None:
+        """Cache video attachments so later related events can recover them."""
+        cache_key = self._build_event_cache_key(event)
+        if not cache_key:
+            return
+
+        self._prune_pending_video_cache()
+        self._pending_video_cache[cache_key] = (
+            monotonic(),
+            [self._clone_video_file(video_file) for video_file in video_files],
+        )
+        logger.info(
+            f"[VideoVision] Cached {len(video_files)} video(s) for follow-up event recovery"
+        )
+
+    def _restore_cached_video_files(self, event: AstrMessageEvent) -> List[File]:
+        """Restore cached video attachments for a related later event."""
+        cache_key = self._build_event_cache_key(event)
+        if not cache_key:
+            return []
+
+        self._prune_pending_video_cache()
+        cached_entry = self._pending_video_cache.pop(cache_key, None)
+        if not cached_entry:
+            return []
+
+        _, cached_files = cached_entry
+        logger.info(
+            f"[VideoVision] Restored {len(cached_files)} cached video(s) for current event"
+        )
+        return [self._clone_video_file(video_file) for video_file in cached_files]
 
     async def _get_video_duration(self, video_path: str) -> Optional[float]:
         """Get video duration using ffprobe."""
@@ -402,6 +465,8 @@ class VideoVisionPlugin(Star):
             logger.info("[VideoVision] No video files detected on this event")
             return
 
+        self._cache_video_files(event, video_files)
+
         # Store video files in event extras for processing in on_waiting_llm_request
         event.set_extra("video_vision_pending_files", video_files)
         logger.info(f"[VideoVision] Found {len(video_files)} video(s), will analyze before LLM request")
@@ -419,6 +484,8 @@ class VideoVisionPlugin(Star):
                 logger.info(
                     "[VideoVision] Recovered video attachments during on_waiting_llm_request"
                 )
+        if not video_files:
+            video_files = self._restore_cached_video_files(event)
 
         if not video_files:
             return
