@@ -1,8 +1,4 @@
 {
-  "_info": {
-    "description": "AstrBot Plugins Monorepo - Unified Configuration Schema",
-    "note": "Each sub-plugin has its own namespace for configuration. Enable/disable plugins using the 'enabled_plugins' field."
-  },
   "enabled_plugins": {
     "type": "list",
     "description": "List of enabled sub-plugins",
