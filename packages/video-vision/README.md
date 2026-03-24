@@ -150,7 +150,6 @@ Describe what you see, including any actions, objects, people, or text visible i
 2. The plugin will automatically:
    - Download the video
    - Extract frames
-   - Send a "Analyzing video..." notification
    - Return the LLM's analysis of the video content
 
 ## Troubleshooting

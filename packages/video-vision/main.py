@@ -601,11 +601,6 @@ class VideoVisionPlugin(Star):
 
             logger.info(f"[VideoVision] Extracted {len(frame_paths)} frames, analyzing with LLM...")
 
-            # Send notification that analysis is in progress
-            await event.send(event.plain_result(
-                f"Analyzing video ({len(frame_paths)} frames extracted)..."
-            ))
-
             # Set context variable for Langfuse naming
             langfuse_observation_ctx.set({
                 "name": "VideoVision Analysis",

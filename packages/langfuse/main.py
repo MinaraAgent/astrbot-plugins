@@ -70,7 +70,7 @@ def log_both(level, msg):
             astrbot_logger.error(f"[Langfuse] {msg}")
     except Exception:
         pass
-    debug_log.debug(msg)
+    logger.info(f"[Langfuse] {msg}")
 
 # Log module load
 log_both("INFO", "=" * 60)
@@ -317,47 +317,70 @@ class LangfusePlugin(Star):
             session = self._get_or_create_session(user_id, platform)
             environment = self.plugin_config.get("environment", "production")
 
-            # Build input data
-            input_data = {}
+            # Build input data in ChatML format for Langfuse playground compatibility
+            # ChatML format: [{"role": "system/user/assistant", "content": "..."}]
+            chatml_messages = []
+            observation_metadata = {}
 
-            if req.prompt:
-                input_data["prompt"] = req.prompt
-
+            # Add system prompt if present
             if req.system_prompt:
-                input_data["system_prompt"] = req.system_prompt
+                chatml_messages.append({"role": "system", "content": req.system_prompt})
 
+            # Add conversation context (already in OpenAI/ChatML format)
             if req.contexts:
-                # Truncate contexts to avoid huge payloads
-                input_data["contexts_count"] = len(req.contexts)
-                input_data["contexts"] = req.contexts[:10]  # First 10 messages
+                # Limit to avoid huge payloads but keep conversation flow
+                for ctx in req.contexts[:20]:
+                    if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
+                        chatml_messages.append({"role": ctx["role"], "content": ctx["content"]})
 
-            if req.image_urls:
-                input_data["image_count"] = len(req.image_urls)
+            # Build current user message content
+            user_content = req.prompt or ""
 
+            # Add extra content parts (like VideoVision analysis) to user message
             if req.extra_user_content_parts:
-                # Include extra content parts (this is where VideoVision injects analysis)
-                extra_parts = []
+                extra_text_parts = []
                 for part in req.extra_user_content_parts:
-                    # Convert ContentPart to dict for logging
-                    if hasattr(part, 'model_dump'):
-                        extra_parts.append(part.model_dump())
-                    elif hasattr(part, 'dict'):
-                        extra_parts.append(part.dict())
+                    part_text = ""
+                    if hasattr(part, 'text'):
+                        part_text = part.text
+                    elif hasattr(part, 'model_dump'):
+                        part_dict = part.model_dump()
+                        part_text = part_dict.get("text", "")
                     elif isinstance(part, dict):
-                        extra_parts.append(part)
-                    else:
-                        # Fallback: try to get text attribute
-                        extra_parts.append({"type": "unknown", "repr": str(part)})
+                        part_text = part.get("text", "")
 
-                input_data["extra_user_content_parts"] = extra_parts
-                input_data["extra_user_content_count"] = len(extra_parts)
+                    if part_text:
+                        extra_text_parts.append(part_text)
 
-                # Log if video vision analysis is detected
-                for part in extra_parts:
-                    part_text = part.get("text", "") if isinstance(part, dict) else ""
+                    # Log if video vision analysis is detected
                     if "[Video Content Analysis]" in part_text:
                         log_both("INFO", f"VideoVision analysis detected in LLM input ({len(part_text)} chars)")
-                        input_data["has_video_analysis"] = True
+                        observation_metadata["has_video_analysis"] = True
+
+                if extra_text_parts:
+                    if user_content:
+                        user_content = f"{user_content}\n\n" + "\n\n".join(extra_text_parts)
+                    else:
+                        user_content = "\n\n".join(extra_text_parts)
+
+            # Add current user message
+            if user_content:
+                # Handle image URLs as multimodal content
+                if req.image_urls:
+                    content_parts = [{"type": "text", "text": user_content}] if user_content else []
+                    for img_url in req.image_urls[:5]:  # Limit images
+                        content_parts.append({"type": "image_url", "image_url": {"url": img_url}})
+                    chatml_messages.append({"role": "user", "content": content_parts})
+                else:
+                    chatml_messages.append({"role": "user", "content": user_content})
+
+            # Use ChatML messages as input for playground compatibility
+            input_data = chatml_messages
+
+            # Check for tool call results in the request
+            if req.tool_calls_result:
+                observation_metadata["has_tool_results"] = True
+                log_both("INFO", "Tool call results detected in request")
 
             # Get model name
             model = req.model or "unknown"
@@ -368,13 +391,14 @@ class LangfusePlugin(Star):
 
             # Determine observation name based on context variable or content
             observation_name = "llm_generation"
-            observation_metadata = {}
 
             # Check if a plugin has set observation metadata via context variable
             ctx_observation = langfuse_observation_ctx.get(None)
             if ctx_observation:
                 observation_name = ctx_observation.get("name", "llm_generation")
-                observation_metadata = ctx_observation.get("metadata", {})
+                # Merge context metadata with existing observation_metadata
+                ctx_metadata = ctx_observation.get("metadata", {})
+                observation_metadata.update(ctx_metadata)
                 log_both("INFO", f"Using custom observation name from context: {observation_name}")
             else:
                 # Fallback: check if video analysis was injected into this request (main conversation)
@@ -396,6 +420,7 @@ class LangfusePlugin(Star):
 
             # Store observation name in session for use in response
             session.metadata["observation_name"] = observation_name
+            session.metadata["has_tool_results"] = observation_metadata.get("has_tool_results", False)
 
             # Use propagate_attributes to properly set session_id and user_id
             with propagate_attributes(
@@ -446,6 +471,40 @@ class LangfusePlugin(Star):
             elif resp.result_chain:
                 completion_text = resp.result_chain.get_plain_text() if hasattr(resp.result_chain, 'get_plain_text') else str(resp.result_chain)
 
+            # Build output in ChatML format
+            # Check for tool calls in response
+            output_data = completion_text
+            has_tool_calls = False
+
+            if hasattr(resp, 'tools_call_args') and resp.tools_call_args:
+                has_tool_calls = True
+                # Build ChatML format output with tool calls
+                tool_calls = []
+                for i, (call_id, name, args) in enumerate(zip(
+                    resp.tools_call_ids or [],
+                    resp.tools_call_name or [],
+                    resp.tools_call_args or []
+                )):
+                    tool_calls.append({
+                        "id": call_id or f"call_{i}",
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": args if isinstance(args, str) else str(args)
+                        }
+                    })
+
+                output_data = {
+                    "role": "assistant",
+                    "content": completion_text if completion_text else None,
+                    "tool_calls": tool_calls
+                }
+                log_both("INFO", f"Response includes {len(tool_calls)} tool calls")
+
+            # Also check for tool call results in request (tool responses)
+            if session.metadata.get("has_tool_results"):
+                has_tool_calls = True
+
             # Get model name - try multiple sources
             model = session.metadata.get("model", "unknown")
 
@@ -466,7 +525,7 @@ class LangfusePlugin(Star):
             if session.current_observation:
                 # Update the existing observation (already has session_id and user_id from request)
                 session.current_observation.update(
-                    output=completion_text,
+                    output=output_data,
                     model=model,
                 )
 
@@ -482,6 +541,12 @@ class LangfusePlugin(Star):
                 session.current_observation = None
             else:
                 # Create a new generation observation with propagate_attributes
+                # Build ChatML format input from session metadata
+                chatml_input = []
+                prompt = session.metadata.get("prompt", "")
+                if prompt:
+                    chatml_input.append({"role": "user", "content": prompt})
+
                 with propagate_attributes(
                     session_id=session.session_id,
                     user_id=user_id,
@@ -494,8 +559,8 @@ class LangfusePlugin(Star):
                         name="llm_generation",
                         as_type="generation",
                         model=model,
-                        input=session.metadata.get("prompt", ""),
-                        output=completion_text,
+                        input=chatml_input,
+                        output=output_data,
                     )
 
                     if usage_dict:
