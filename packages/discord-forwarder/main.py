@@ -30,12 +30,6 @@ class ForwardRule:
     enabled: bool = True
 
 
-@register(
-    "astrbot_plugin_discord_forwarder",
-    "Minara",
-    "Discord message forwarding plugin - forwards messages between channels",
-    "1.2.1",
-)
 class DiscordForwarderPlugin(Star):
     """Discord message forwarding plugin with support for multiple forwarding rules."""
 

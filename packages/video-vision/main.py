@@ -40,12 +40,6 @@ DEFAULT_CONFIG = {
 }
 
 
-@register(
-    "astrbot_plugin_video_vision",
-    "Minara",
-    "Analyze video attachments from Discord messages using LLM vision capabilities",
-    "1.0.0"
-)
 class VideoVisionPlugin(Star):
     """Plugin that analyzes video attachments using LLM vision capabilities."""
 
