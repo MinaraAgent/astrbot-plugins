@@ -19,5 +19,5 @@ tags:
   - monorepo
   - multi-plugin
   - integration
-repository: https://github.com/MinaraAgent/astrbot-plugins
+repo: https://github.com/MinaraAgent/astrbot-plugins
 license: MIT
