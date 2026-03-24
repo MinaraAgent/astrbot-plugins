@@ -268,6 +268,10 @@ class DiscordForwarderPlugin(Star):
         Handle all Discord messages and forward if matching a rule.
         This handler catches all Discord messages without requiring a command.
         """
+        # Check if this is a Discord message (replicating @filter.platform_adapter_type)
+        if not event.platform_meta or event.platform_meta.adapter_type != filter.PlatformAdapterType.DISCORD:
+            return
+
         # Skip if plugin is disabled
         if not self.enabled:
             return

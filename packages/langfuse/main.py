@@ -266,7 +266,10 @@ class LangfusePlugin(Star):
             yield event.plain_result(f"Flush failed: {e}")
 
     async def on_all_message(self, event: AstrMessageEvent):
-        """Handle all message events for tracing"""
+        """
+        Handle all message events for tracing.
+        Note: This is called from the meta-plugin's on_all_messages handler.
+        """
         if not self.enabled or not self.plugin_config.get("enabled_message_tracing", True):
             return
 
