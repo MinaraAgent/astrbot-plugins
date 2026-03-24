@@ -12,7 +12,6 @@ This monorepo consolidates multiple AstrBot plugins into a single repository for
 |--------|-------------|---------|
 | [langfuse](./packages/langfuse) | Langfuse integration for LLM observability | 1.0.2 |
 | [discord-forwarder](./packages/discord-forwarder) | Discord message forwarding plugin | 1.2.1 |
-| [group-geetest-verify](./packages/group-geetest-verify) | Group join verification with GeeTest | 1.2.3 |
 | [video-vision](./packages/video-vision) | Video frame extraction for vision models | 1.1.0 |
 
 ## Installation
@@ -48,7 +47,6 @@ astrbot-plugins/
 ├── packages/              # Individual plugin packages
 │   ├── langfuse/         # Langfuse integration
 │   ├── discord-forwarder/ # Discord message forwarding
-│   ├── group-geetest-verify/ # Group verification
 │   └── video-vision/     # Video processing for vision
 ├── scripts/              # Shared build and development scripts
 ├── docs/                 # Shared documentation

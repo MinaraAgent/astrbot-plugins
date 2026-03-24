@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        plugin: [langfuse, discord-forwarder, group-geetest-verify, video-vision]
+        plugin: [langfuse, discord-forwarder, video-vision]
 
     steps:
     - uses: actions/checkout@v3

@@ -11,7 +11,6 @@ astrbot-plugins/
 ├── packages/              # Plugin packages
 │   ├── langfuse/         # Langfuse integration plugin
 │   ├── discord-forwarder/ # Discord message forwarding
-│   ├── group-geetest-verify/ # Group verification
 │   └── video-vision/     # Video processing for vision
 ├── scripts/              # Development and maintenance scripts
 ├── docs/                 # Additional documentation

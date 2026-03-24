@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Combined 4 AstrBot plugins into single repository:
   - langfuse (v1.0.2)
   - discord-forwarder (v1.2.1)
-  - group-geetest-verify (v1.2.3)
   - video-vision (v1.1.0)
 
 ### Changed
