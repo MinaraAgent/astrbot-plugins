@@ -376,15 +376,34 @@ class VideoVisionPlugin(Star):
 
         # Get message components
         messages = event.get_messages()
+        logger.info(f"[VideoVision] get_messages() returned {len(messages) if messages else 0} component(s)")
+
         if not messages:
-            return
+            logger.debug("[VideoVision] No messages returned from event.get_messages()")
+            # Try alternative approach - check message_obj directly
+            try:
+                message_obj = event.message_obj
+                if message_obj and hasattr(message_obj, "message"):
+                    messages = message_obj.message
+                    logger.info(f"[VideoVision] Got {len(messages)} components from message_obj.message")
+                else:
+                    logger.debug("[VideoVision] message_obj or message_obj.message not available")
+                    return
+            except Exception as e:
+                logger.error(f"[VideoVision] Error getting message_obj: {e}")
+                return
 
         # Find video file attachments
         video_files = []
-        for msg in messages:
+        for i, msg in enumerate(messages):
+            logger.debug(f"[VideoVision] Component {i}: type={type(msg).__name__}")
             if isinstance(msg, File):
+                logger.info(f"[VideoVision] Found File component: name={msg.name}")
                 if self._is_video_file(msg.name):
                     video_files.append(msg)
+                    logger.info(f"[VideoVision] ✓ Video file detected: {msg.name}")
+                else:
+                    logger.info(f"[VideoVision] ✗ File is not a video: {msg.name}")
 
         if not video_files:
             return
