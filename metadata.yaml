@@ -1,0 +1,23 @@
+name: astrbot_plugins
+author: Minara
+version: 1.0.0
+description: |
+  AstrBot Plugins Monorepo - Meta plugin that manages all sub-plugins.
+
+  This plugin consolidates multiple AstrBot plugins into a single installation
+  with unified, namespaced configuration through the WebUI.
+
+  Sub-plugins included:
+  - langfuse: Langfuse integration for LLM observability (v1.0.2)
+  - discord-forwarder: Discord message forwarding plugin (v1.2.1)
+  - video-vision: Video frame extraction for vision models (v1.1.0)
+
+  Install this single plugin and configure each sub-plugin independently
+  through the AstrBot WebUI.
+tags:
+  - meta
+  - monorepo
+  - multi-plugin
+  - integration
+repository: https://github.com/MinaraAgent/astrbot-plugins
+license: MIT

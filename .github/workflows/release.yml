@@ -6,6 +6,7 @@ on:
       - 'langfuse-v*'
       - 'discord-forwarder-v*'
       - 'video-vision-v*'
+      - 'astrbot-plugins-v*'
 
 jobs:
   release:
@@ -32,6 +33,6 @@ jobs:
         body: |
           Release of ${{ steps.extract.outputs.plugin }} version ${{ steps.extract.outputs.version }}
 
-          See the [CHANGELOG](https://github.com/MinaraAgent/astrbot-plugins/blob/main/packages/${{ steps.extract.outputs.plugin }}/CHANGELOG.md) for details.
+          ${{ steps.extract.outputs.plugin == 'astrbot-plugins' && 'This is the meta-plugin release that includes all sub-plugins. See the [CHANGELOG](https://github.com/MinaraAgent/astrbot-plugins/blob/main/CHANGELOG.md) for details.' || format('See the [CHANGELOG](https://github.com/MinaraAgent/astrbot-plugins/blob/main/packages/{0}/CHANGELOG.md) for details.', steps.extract.outputs.plugin) }}
         draft: false
         prerelease: false

@@ -8,7 +8,10 @@ This document provides detailed information for developers working on the AstrBo
 
 ```
 astrbot-plugins/
-├── packages/              # Plugin packages
+├── main.py               # Meta-plugin entry point (loads all sub-plugins)
+├── metadata.yaml         # Meta-plugin metadata
+├── _conf_schema.json     # Unified configuration schema with namespaces
+├── packages/             # Sub-plugin packages
 │   ├── langfuse/         # Langfuse integration plugin
 │   ├── discord-forwarder/ # Discord message forwarding
 │   └── video-vision/     # Video processing for vision
@@ -19,13 +22,23 @@ astrbot-plugins/
 └── README.md             # Monorepo overview
 ```
 
-### Plugin Architecture
+### Meta-Plugin Architecture
 
-Each plugin is an independent package that follows the AstrBot plugin architecture:
+The `astrbot-plugins` monorepo uses a meta-plugin architecture:
+
+1. **Single Installation**: Users install the meta-plugin (`astrbot-plugins`) to get all functionality
+2. **Namespaced Configuration**: Each sub-plugin has its own config namespace (e.g., `langfuse.*`, `discord-forwarder.*`)
+3. **Dynamic Loading**: The meta-plugin dynamically loads and manages sub-plugins
+4. **Event Delegation**: The meta-plugin receives events and delegates to enabled sub-plugins
+5. **Lifecycle Management**: Automatic initialization and termination of sub-plugins
+
+### Sub-Plugin Architecture
+
+Each sub-plugin is an independent package that follows the AstrBot plugin architecture:
 
 1. **Entry Point**: `main.py` contains the plugin class
 2. **Metadata**: `metadata.yaml` describes the plugin
-3. **Configuration**: `_conf_schema.json` defines the WebUI configuration
+3. **Configuration**: Configuration is defined in the root `_conf_schema.json` under the plugin's namespace
 4. **Dependencies**: `requirements.txt` lists Python dependencies
 
 ## Plugin Lifecycle
@@ -85,33 +98,137 @@ data = shared_data.get()
 
 ## Configuration Management
 
-### Schema Definition
+### Namespaced Configuration
 
-Configuration is defined in `_conf_schema.json`:
+The meta-plugin provides namespaced configuration for each sub-plugin in the root `_conf_schema.json`:
 
 ```json
 {
-  "type": "object",
-  "properties": {
-    "enabled": {
-      "type": "boolean",
-      "default": true
-    },
-    "api_key": {
-      "type": "string",
-      "description": "API Key for service"
+  "enabled_plugins": {
+    "type": "list",
+    "description": "List of enabled sub-plugins",
+    "default": ["langfuse", "discord-forwarder", "video-vision"]
+  },
+  "langfuse": {
+    "type": "object",
+    "items": {
+      "secret_key": {"type": "string"},
+      "enabled": {"type": "bool", "default": true}
+    }
+  },
+  "discord-forwarder": {
+    "type": "object",
+    "items": {
+      "forward_rules": {"type": "template_list"}
     }
   }
 }
 ```
 
-### Accessing Configuration
+### Accessing Configuration in Sub-Plugins
 
+Sub-plugins receive their namespaced configuration through the meta-plugin:
+
+```python
+# In meta-plugin main.py
+async def _load_sub_plugin(self, plugin_name: str) -> None:
+    plugin_config = self.config.get(plugin_name, {})
+    plugin_instance = plugin_class(self.context, plugin_config)
+```
+
+### Adding Configuration for a New Sub-Plugin
+
+1. Add the namespace to `_conf_schema.json`:
+```json
+"my-plugin": {
+  "type": "object",
+  "description": "My Plugin Configuration",
+  "items": {
+    "enabled": {"type": "bool", "default": true},
+    "api_key": {"type": "string"}
+  }
+}
+```
+
+2. Access the configuration in your sub-plugin:
 ```python
 async def initialize(self):
     enabled = self.config.get("enabled", True)
     api_key = self.config.get("api_key", "")
 ```
+
+## Adding a New Sub-Plugin
+
+### Step 1: Create the Sub-Plugin Directory
+
+```bash
+mkdir packages/my-plugin
+cd packages/my-plugin
+```
+
+### Step 2: Create Plugin Files
+
+Create the standard AstrBot plugin structure:
+
+```
+packages/my-plugin/
+├── main.py              # Plugin class with @register decorator
+├── metadata.yaml        # Plugin metadata
+├── requirements.txt     # Python dependencies
+├── README.md           # Plugin documentation
+└── CHANGELOG.md        # Version history
+```
+
+### Step 3: Register the Sub-Plugin
+
+Add the sub-plugin to the `SUB_PLUGINS` dictionary in `main.py` at the root:
+
+```python
+SUB_PLUGINS = {
+    # ... existing plugins
+    "my-plugin": {
+        "module": "packages.my-plugin.main",
+        "class": "MyPlugin",
+        "description": "My awesome plugin",
+        "version": "1.0.0",
+    },
+}
+```
+
+### Step 4: Add Configuration Schema
+
+Add the plugin's configuration namespace to `_conf_schema.json` at the root:
+
+```json
+{
+  "my-plugin": {
+    "type": "object",
+    "description": "My Plugin Configuration",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "default": true
+      },
+      "api_key": {
+        "type": "string"
+      }
+    }
+  }
+}
+```
+
+### Step 5: Update Documentation
+
+- Add the plugin to `README.md`
+- Update the version table
+- Add plugin-specific documentation if needed
+
+### Step 6: Test
+
+1. Copy the entire `astrbot-plugins` directory to AstrBot's `data/plugins/`
+2. Configure via WebUI or config file
+3. Test the sub-plugin functionality
+4. Verify that events are properly delegated
 
 ## Development Scripts
 
@@ -141,20 +258,63 @@ npm run release
 
 ## Testing
 
-### Local Testing
+### Local Testing Meta-Plugin
 
-1. Copy plugin to AstrBot plugins directory
-2. Restart AstrBot
-3. Test functionality
-4. Check logs for errors
+1. Copy the entire `astrbot-plugins` directory to AstrBot's `data/plugins/`:
+```bash
+cp -r astrbot-plugins /path/to/astrbot/data/plugins/
+```
+
+2. Configure via WebUI:
+   - Open AstrBot WebUI
+   - Navigate to Extensions → astrbot_plugins
+   - Enable/disable sub-plugins as needed
+   - Configure each sub-plugin's namespace
+
+3. Restart AstrBot or reload plugins
+
+4. Test functionality:
+```bash
+# Check meta-plugin status
+/astrbot_plugins_status
+
+# Enable/disable sub-plugins
+/astrbot_plugins_enable langfuse
+/astrbot_plugins_disable video-vision
+
+# Test individual sub-plugin commands
+/langfuse_status
+/forward_status
+/video_vision_status
+```
+
+### Local Testing Sub-Plugins Individually
+
+Each sub-plugin can still be tested independently:
+
+1. Navigate to the sub-plugin directory:
+```bash
+cd packages/[plugin-name]/
+```
+
+2. Copy to AstrBot plugins directory:
+```bash
+cp -r . /path/to/astrbot/data/plugins/[plugin-name]/
+```
+
+3. Configure the sub-plugin via WebUI
+
+4. Test the sub-plugin functionality
 
 ### Automated Testing
 
 The CI workflow automatically:
-- Validates plugin structure
-- Checks metadata.yaml format
-- Validates JSON schemas
-- Lints Python code
+- Validates meta-plugin structure (`main.py`, `metadata.yaml`, `_conf_schema.json`)
+- Validates sub-plugin structures
+- Checks metadata.yaml format for all plugins
+- Validates JSON schemas for all plugins
+- Lints Python code for all plugins
+- Tests meta-plugin loading and sub-plugin delegation
 
 ## Platform-Specific Considerations
 

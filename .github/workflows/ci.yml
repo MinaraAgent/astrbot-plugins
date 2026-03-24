@@ -83,12 +83,62 @@ print(f'✅ Metadata valid for {{metadata[\"name\"]}}')
 
     - name: Lint Python files
       run: |
+        # Lint main meta-plugin
+        if [ -f "main.py" ]; then
+          echo "Linting main meta-plugin"
+          flake8 "main.py" --max-line-length=120 --ignore=E501,W503 || true
+        fi
+        # Lint sub-plugins
         for plugin in packages/*/; do
           echo "Linting $plugin"
           if [ -f "$plugin/main.py" ]; then
             flake8 "$plugin/main.py" --max-line-length=120 --ignore=E501,W503 || true
           fi
         done
+
+  validate-meta-plugin:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Check meta-plugin structure
+      run: |
+        if [ ! -f "main.py" ]; then
+          echo "Error: main.py not found at root"
+          exit 1
+        fi
+        if [ ! -f "metadata.yaml" ]; then
+          echo "Error: metadata.yaml not found at root"
+          exit 1
+        fi
+        if [ ! -f "_conf_schema.json" ]; then
+          echo "Error: _conf_schema.json not found at root"
+          exit 1
+        fi
+        echo "✅ Meta-plugin structure valid"
+
+    - name: Validate metadata.yaml
+      run: |
+        python3 -c "
+import yaml
+import sys
+
+with open('metadata.yaml', 'r') as f:
+    metadata = yaml.safe_load(f)
+
+required_fields = ['name', 'version', 'author']
+for field in required_fields:
+    if field not in metadata:
+        print(f'Error: Missing required field {field}')
+        sys.exit(1)
+
+print(f'✅ Metadata valid for {metadata[\"name\"]}')
+"
 
   validate-config-schemas:
     runs-on: ubuntu-latest
@@ -103,6 +153,13 @@ print(f'✅ Metadata valid for {{metadata[\"name\"]}}')
     - name: Validate JSON schemas
       run: |
         pip install jsonschema
+        # Validate main meta-plugin schema
+        if [ -f "_conf_schema.json" ]; then
+          echo "Validating main _conf_schema.json"
+          python3 -m json.tool "_conf_schema.json" > /dev/null
+          echo "✅ JSON valid for meta-plugin"
+        fi
+        # Validate sub-plugin schemas
         for plugin in packages/*/; do
           if [ -f "$plugin/_conf_schema.json" ]; then
             echo "Validating $plugin/_conf_schema.json"
