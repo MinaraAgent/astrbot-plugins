@@ -159,6 +159,23 @@ class AstrBotPluginsMeta(Star):
         """Get the namespaced configuration for a sub-plugin."""
         return self.config.get(plugin_name, {})
 
+    def _get_sub_plugin_instance(self, plugin_name: str) -> Optional[Star]:
+        """Get an already loaded sub-plugin instance."""
+        return self._sub_plugin_instances.get(plugin_name)
+
+    async def _ensure_sub_plugin_loaded(self, plugin_name: str) -> Optional[Star]:
+        """Load a sub-plugin on demand if it is not active yet."""
+        instance = self._get_sub_plugin_instance(plugin_name)
+        if instance:
+            return instance
+
+        if plugin_name not in SUB_PLUGINS:
+            return None
+
+        self._enabled_plugins.add(plugin_name)
+        await self._load_sub_plugin(plugin_name)
+        return self._get_sub_plugin_instance(plugin_name)
+
     def _delegate_to_plugins(self, method_name: str, *args, **kwargs):
         """
         Delegate a method call to all active sub-plugins that have the method.
@@ -314,3 +331,38 @@ class AstrBotPluginsMeta(Star):
             f"Plugin '{plugin_name}' has been disabled and unloaded.\n"
             f"Note: This change is not persistent. Update the config in WebUI to make it permanent."
         )
+
+    @filter.command("video_vision_status")
+    async def video_vision_status_command(self, event: AstrMessageEvent):
+        """Show the Video Vision sub-plugin status."""
+        instance = self._get_sub_plugin_instance("video-vision")
+        if not instance or not hasattr(instance, "get_status_text"):
+            yield event.plain_result(
+                "Video Vision plugin is not currently loaded.\n"
+                "Use `/astrbot_plugins_enable video-vision` to load it first."
+            )
+            return
+
+        yield event.plain_result(instance.get_status_text())
+
+    @filter.command("video_vision_enable")
+    async def video_vision_enable_command(self, event: AstrMessageEvent):
+        """Enable the Video Vision sub-plugin."""
+        instance = await self._ensure_sub_plugin_loaded("video-vision")
+        if not instance or not hasattr(instance, "enable_plugin"):
+            yield event.plain_result("Failed to load the Video Vision plugin.")
+            return
+
+        instance.enable_plugin()
+        yield event.plain_result("Video Vision plugin enabled.")
+
+    @filter.command("video_vision_disable")
+    async def video_vision_disable_command(self, event: AstrMessageEvent):
+        """Disable the Video Vision sub-plugin."""
+        instance = self._get_sub_plugin_instance("video-vision")
+        if not instance or not hasattr(instance, "disable_plugin"):
+            yield event.plain_result("Video Vision plugin is already disabled.")
+            return
+
+        instance.disable_plugin()
+        yield event.plain_result("Video Vision plugin disabled.")

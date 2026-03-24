@@ -630,9 +630,8 @@ class VideoVisionPlugin(Star):
             except Exception as e:
                 logger.warning(f"[VideoVision] Failed to clean up temp directory: {e}")
 
-    @filter.command("video_vision_status")
-    async def status_command(self, event: AstrMessageEvent):
-        """Check video vision plugin status."""
+    def get_status_text(self) -> str:
+        """Build the current video vision status message."""
         status_parts = [
             "**Video Vision Plugin Status**",
             f"- Enabled: {self.config.get('enabled', True)}",
@@ -657,16 +656,12 @@ class VideoVisionPlugin(Star):
         else:
             status_parts.append("- Channel Filter: All channels")
 
-        yield event.plain_result("\n".join(status_parts))
+        return "\n".join(status_parts)
 
-    @filter.command("video_vision_enable")
-    async def enable_command(self, event: AstrMessageEvent):
-        """Enable video vision plugin."""
+    def enable_plugin(self) -> None:
+        """Enable video vision processing."""
         self.config["enabled"] = True
-        yield event.plain_result("Video Vision plugin enabled.")
 
-    @filter.command("video_vision_disable")
-    async def disable_command(self, event: AstrMessageEvent):
-        """Disable video vision plugin."""
+    def disable_plugin(self) -> None:
+        """Disable video vision processing."""
         self.config["enabled"] = False
-        yield event.plain_result("Video Vision plugin disabled.")
