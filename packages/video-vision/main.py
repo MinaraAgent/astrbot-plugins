@@ -122,6 +122,19 @@ class VideoVisionPlugin(Star):
 
         return False
 
+    def _get_video_files_from_event(self, event: AstrMessageEvent) -> List[File]:
+        """Extract video attachments from the current event."""
+        messages = event.get_messages()
+        if not messages:
+            return []
+
+        video_files: List[File] = []
+        for msg in messages:
+            if isinstance(msg, File) and self._is_video_file(msg.name):
+                video_files.append(msg)
+
+        return video_files
+
     async def _get_video_duration(self, video_path: str) -> Optional[float]:
         """Get video duration using ffprobe."""
         try:
@@ -357,56 +370,36 @@ class VideoVisionPlugin(Star):
         logger.info("[VideoVision] on_discord_message called!")
         # Check if this is a Discord message (replicating @filter.platform_adapter_type)
         if not event.platform_meta or event.platform_meta.adapter_type != filter.PlatformAdapterType.DISCORD:
+            logger.info("[VideoVision] Not a Discord message, skipping")
             return
+
+        logger.info(f"[VideoVision] Discord message confirmed, platform_meta={event.platform_meta}")
 
         # Check if plugin is enabled
         if not self.config.get("enabled", True):
+            logger.info("[VideoVision] Plugin disabled in config")
             return
 
         # Check if ffmpeg is available
         if not self._ffmpeg_available:
+            logger.info("[VideoVision] ffmpeg not available")
             return
 
         # Check platform filter
         if not self._should_process_platform(event):
+            logger.info("[VideoVision] Platform filter did not match")
             return
 
         # Check channel filter
         if not self._should_process_channel(event):
+            logger.info(f"[VideoVision] Channel filter did not match - session_id={event.session_id}, unified_origin={event.unified_msg_origin}")
             return
 
-        # Get message components
-        messages = event.get_messages()
-        logger.info(f"[VideoVision] get_messages() returned {len(messages) if messages else 0} component(s)")
+        logger.info("[VideoVision] All checks passed, checking for video files...")
 
-        if not messages:
-            logger.debug("[VideoVision] No messages returned from event.get_messages()")
-            # Try alternative approach - check message_obj directly
-            try:
-                message_obj = event.message_obj
-                if message_obj and hasattr(message_obj, "message"):
-                    messages = message_obj.message
-                    logger.info(f"[VideoVision] Got {len(messages)} components from message_obj.message")
-                else:
-                    logger.debug("[VideoVision] message_obj or message_obj.message not available")
-                    return
-            except Exception as e:
-                logger.error(f"[VideoVision] Error getting message_obj: {e}")
-                return
-
-        # Find video file attachments
-        video_files = []
-        for i, msg in enumerate(messages):
-            logger.debug(f"[VideoVision] Component {i}: type={type(msg).__name__}")
-            if isinstance(msg, File):
-                logger.info(f"[VideoVision] Found File component: name={msg.name}")
-                if self._is_video_file(msg.name):
-                    video_files.append(msg)
-                    logger.info(f"[VideoVision] ✓ Video file detected: {msg.name}")
-                else:
-                    logger.info(f"[VideoVision] ✗ File is not a video: {msg.name}")
-
+        video_files = self._get_video_files_from_event(event)
         if not video_files:
+            logger.info("[VideoVision] No video files detected on this event")
             return
 
         # Store video files in event extras for processing in on_waiting_llm_request
@@ -420,6 +413,13 @@ class VideoVisionPlugin(Star):
         This is called by the meta-plugin's event delegation.
         """
         video_files = event.get_extra("video_vision_pending_files")
+        if not video_files:
+            video_files = self._get_video_files_from_event(event)
+            if video_files:
+                logger.info(
+                    "[VideoVision] Recovered video attachments during on_waiting_llm_request"
+                )
+
         if not video_files:
             return
 
