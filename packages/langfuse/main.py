@@ -364,7 +364,7 @@ class LangfusePlugin(Star):
                         user_content = "\n\n".join(extra_text_parts)
 
             # Add current user message
-            if user_content:
+            if user_content or req.image_urls:
                 # Handle image URLs as multimodal content
                 if req.image_urls:
                     content_parts = [{"type": "text", "text": user_content}] if user_content else []
