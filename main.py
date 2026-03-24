@@ -186,7 +186,19 @@ class AstrBotPluginsMeta(Star):
     @filter.platform_adapter_type(filter.PlatformAdapterType.DISCORD)
     async def on_discord_message(self, event: AstrMessageEvent):
         """Handle Discord messages - delegate to sub-plugins."""
+        logger.debug(f"[AstrBotPlugins] on_discord_message called, delegating to {len(self._sub_plugin_instances)} sub-plugins")
         tasks = self._delegate_to_plugins("on_discord_message", event)
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.debug(f"[AstrBotPlugins] Delegation results: {results}")
+        else:
+            logger.debug("[AstrBotPlugins] No tasks returned from delegation")
+
+    @filter.on_waiting_llm_request()
+    async def on_waiting_llm_request(self, event: AstrMessageEvent):
+        """Handle waiting LLM requests - delegate to sub-plugins."""
+        logger.debug(f"[AstrBotPlugins] on_waiting_llm_request called")
+        tasks = self._delegate_to_plugins("on_waiting_llm_request", event)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 

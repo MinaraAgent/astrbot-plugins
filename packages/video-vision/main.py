@@ -354,6 +354,7 @@ class VideoVisionPlugin(Star):
         Handle Discord messages and check for video attachments.
         Marks the event as having videos that need processing before LLM request.
         """
+        logger.info("[VideoVision] on_discord_message called!")
         # Check if this is a Discord message (replicating @filter.platform_adapter_type)
         if not event.platform_meta or event.platform_meta.adapter_type != filter.PlatformAdapterType.DISCORD:
             return
