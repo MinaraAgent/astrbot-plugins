@@ -355,7 +355,6 @@ class VideoVisionPlugin(Star):
             traceback.print_exc()
             return None
 
-    @filter.platform_adapter_type(filter.PlatformAdapterType.DISCORD)
     async def on_discord_message(self, event: AstrMessageEvent):
         """
         Handle Discord messages and check for video attachments.
@@ -396,7 +395,6 @@ class VideoVisionPlugin(Star):
         event.set_extra("video_vision_pending_files", video_files)
         logger.info(f"[VideoVision] Found {len(video_files)} video(s), will analyze before LLM request")
 
-    @filter.on_waiting_llm_request()
     async def process_videos_before_llm(self, event: AstrMessageEvent) -> None:
         """
         Process videos BEFORE the LLM request starts.
@@ -428,7 +426,6 @@ class VideoVisionPlugin(Star):
         # Clear pending files
         event.set_extra("video_vision_pending_files", None)
 
-    @filter.on_llm_request()
     async def inject_video_context(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """
         Inject video analysis results into the LLM request context.

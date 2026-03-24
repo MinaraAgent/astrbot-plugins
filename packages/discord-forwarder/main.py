@@ -263,7 +263,6 @@ class DiscordForwarderPlugin(Star):
 
         return chain if has_forwarded_content else None
 
-    @filter.platform_adapter_type(filter.PlatformAdapterType.DISCORD)
     async def on_discord_message(self, event: AstrMessageEvent):
         """
         Handle all Discord messages and forward if matching a rule.

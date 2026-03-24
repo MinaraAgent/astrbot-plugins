@@ -265,7 +265,6 @@ class LangfusePlugin(Star):
         except Exception as e:
             yield event.plain_result(f"Flush failed: {e}")
 
-    @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_all_message(self, event: AstrMessageEvent):
         """Handle all message events for tracing"""
         if not self.enabled or not self.plugin_config.get("enabled_message_tracing", True):
@@ -301,7 +300,6 @@ class LangfusePlugin(Star):
         except Exception as e:
             log_both("ERROR", f"Message trace error: {e}")
 
-    @filter.on_llm_request()
     async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
         """Hook into LLM request for tracing"""
         if not self.enabled or not self.plugin_config.get("enabled_llm_tracing", True):
@@ -424,7 +422,6 @@ class LangfusePlugin(Star):
             log_both("ERROR", f"LLM request trace error: {e}")
             log_both("ERROR", traceback.format_exc())
 
-    @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, resp: LLMResponse):
         """Hook into LLM response for tracing"""
         if not self.enabled or not self.plugin_config.get("enabled_llm_tracing", True):
