@@ -393,10 +393,11 @@ class VideoVisionPlugin(Star):
         event.set_extra("video_vision_pending_files", video_files)
         logger.info(f"[VideoVision] Found {len(video_files)} video(s), will analyze before LLM request")
 
-    async def process_videos_before_llm(self, event: AstrMessageEvent) -> None:
+    async def on_waiting_llm_request(self, event: AstrMessageEvent) -> None:
         """
         Process videos BEFORE the LLM request starts.
         This ensures video analysis is available when the persona responds.
+        This is called by the meta-plugin's event delegation.
         """
         video_files = event.get_extra("video_vision_pending_files")
         if not video_files:
@@ -424,10 +425,11 @@ class VideoVisionPlugin(Star):
         # Clear pending files
         event.set_extra("video_vision_pending_files", None)
 
-    async def inject_video_context(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+    async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """
         Inject video analysis results into the LLM request context.
         This allows the persona to respond naturally to video content.
+        This is called by the meta-plugin's event delegation.
         """
         video_analyses = event.get_extra("video_vision_analyses")
         if not video_analyses:
