@@ -111,12 +111,17 @@ class AstrBotPluginsMeta(Star):
         class_name = plugin_info["class"]
 
         try:
-            # Add the plugin directory to Python path
-            plugin_dir = Path(__file__).parent / "packages" / plugin_name
-            if str(plugin_dir) not in sys.path:
-                sys.path.insert(0, str(plugin_dir.parent))
+            # Get the plugin root directory (where main.py is located)
+            plugin_root = Path(__file__).parent
+
+            # Add the plugin root to Python path if not already there
+            str_plugin_root = str(plugin_root)
+            if str_plugin_root not in sys.path:
+                sys.path.insert(0, str_plugin_root)
+                logger.debug(f"[AstrBotPlugins] Added to sys.path: {str_plugin_root}")
 
             # Import the plugin module
+            # module_path is like "packages.langfuse.main"
             module = importlib.import_module(module_path)
 
             # Get the plugin class
@@ -141,6 +146,8 @@ class AstrBotPluginsMeta(Star):
 
         except ImportError as e:
             logger.error(f"[AstrBotPlugins] Failed to import {plugin_name}: {e}")
+            logger.error(f"[AstrBotPlugins] Module path: {module_path}")
+            logger.error(f"[AstrBotPlugins] sys.path: {sys.path}")
         except AttributeError as e:
             logger.error(f"[AstrBotPlugins] Class {class_name} not found in {plugin_name}: {e}")
         except Exception as e:
