@@ -50,7 +50,7 @@ class VideoVisionPlugin(Star):
         super().__init__(context)
         self.config = {**DEFAULT_CONFIG, **(config or {})}
         self._ffmpeg_available: Optional[bool] = None
-        self._pending_video_cache: dict[str, tuple[float, list[File]]] = {}
+        self._pending_video_cache: dict[str, list[tuple[float, list[File]]]] = {}
         logger.info(f"[VideoVision] Plugin instance created with config: enabled={self.config.get('enabled', True)}")
 
     async def initialize(self):
@@ -158,11 +158,18 @@ class VideoVisionPlugin(Star):
     def _prune_pending_video_cache(self) -> None:
         """Drop stale cached video attachments."""
         cutoff = monotonic() - VIDEO_EVENT_CACHE_TTL_SECONDS
-        stale_keys = [
-            cache_key
-            for cache_key, (created_at, _) in self._pending_video_cache.items()
-            if created_at < cutoff
-        ]
+        stale_keys: list[str] = []
+        for cache_key, cached_entries in self._pending_video_cache.items():
+            fresh_entries = [
+                (created_at, cached_files)
+                for created_at, cached_files in cached_entries
+                if created_at >= cutoff
+            ]
+            if fresh_entries:
+                self._pending_video_cache[cache_key] = fresh_entries
+            else:
+                stale_keys.append(cache_key)
+
         for cache_key in stale_keys:
             del self._pending_video_cache[cache_key]
 
@@ -173,9 +180,11 @@ class VideoVisionPlugin(Star):
             return
 
         self._prune_pending_video_cache()
-        self._pending_video_cache[cache_key] = (
-            monotonic(),
-            [self._clone_video_file(video_file) for video_file in video_files],
+        self._pending_video_cache.setdefault(cache_key, []).append(
+            (
+                monotonic(),
+                [self._clone_video_file(video_file) for video_file in video_files],
+            )
         )
         logger.info(
             f"[VideoVision] Cached {len(video_files)} video(s) for follow-up event recovery"
@@ -188,11 +197,14 @@ class VideoVisionPlugin(Star):
             return []
 
         self._prune_pending_video_cache()
-        cached_entry = self._pending_video_cache.pop(cache_key, None)
-        if not cached_entry:
+        cached_entries = self._pending_video_cache.get(cache_key)
+        if not cached_entries:
             return []
 
-        _, cached_files = cached_entry
+        _, cached_files = cached_entries.pop(0)
+        if not cached_entries:
+            del self._pending_video_cache[cache_key]
+
         logger.info(
             f"[VideoVision] Restored {len(cached_files)} cached video(s) for current event"
         )

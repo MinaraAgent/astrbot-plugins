@@ -354,7 +354,10 @@ class AstrBotPluginsMeta(Star):
             return
 
         instance.enable_plugin()
-        yield event.plain_result("Video Vision plugin enabled.")
+        yield event.plain_result(
+            "Video Vision plugin enabled.\n"
+            "Note: This change is not persistent. Update the config in WebUI to make it permanent."
+        )
 
     @filter.command("video_vision_disable")
     async def video_vision_disable_command(self, event: AstrMessageEvent):
@@ -365,4 +368,7 @@ class AstrBotPluginsMeta(Star):
             return
 
         instance.disable_plugin()
-        yield event.plain_result("Video Vision plugin disabled.")
+        yield event.plain_result(
+            "Video Vision plugin disabled.\n"
+            "Note: This change is not persistent. Update the config in WebUI to make it permanent."
+        )
