@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-plugins:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        plugin: [langfuse, discord-forwarder, group-geetest-verify, video-vision]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Check plugin structure
+      run: |
+        cd packages/${{ matrix.plugin }}
+        if [ ! -f "main.py" ]; then
+          echo "Error: main.py not found"
+          exit 1
+        fi
+        if [ ! -f "metadata.yaml" ]; then
+          echo "Error: metadata.yaml not found"
+          exit 1
+        fi
+        if [ ! -f "_conf_schema.json" ]; then
+          echo "Error: _conf_schema.json not found"
+          exit 1
+        fi
+        echo "✅ Plugin structure valid for ${{ matrix.plugin }}"
+
+    - name: Validate metadata.yaml
+      run: |
+        cd packages/${{ matrix.plugin }}
+        python3 -c "
+import yaml
+import sys
+
+with open('metadata.yaml', 'r') as f:
+    metadata = yaml.safe_load(f)
+
+required_fields = ['name', 'version', 'author']
+for field in required_fields:
+    if field not in metadata:
+        print(f'Error: Missing required field {field}')
+        sys.exit(1)
+
+print(f'✅ Metadata valid for {{metadata[\"name\"]}}')
+"
+
+    - name: Check dependencies
+      run: |
+        cd packages/${{ matrix.plugin }}
+        if [ -f "requirements.txt" ]; then
+          echo "📦 Dependencies found:"
+          cat requirements.txt || true
+        else
+          echo "ℹ️  No requirements.txt file"
+        fi
+
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install linting tools
+      run: |
+        pip install flake8 pyyaml
+
+    - name: Lint Python files
+      run: |
+        for plugin in packages/*/; do
+          echo "Linting $plugin"
+          if [ -f "$plugin/main.py" ]; then
+            flake8 "$plugin/main.py" --max-line-length=120 --ignore=E501,W503 || true
+          fi
+        done
+
+  validate-config-schemas:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Validate JSON schemas
+      run: |
+        pip install jsonschema
+        for plugin in packages/*/; do
+          if [ -f "$plugin/_conf_schema.json" ]; then
+            echo "Validating $plugin/_conf_schema.json"
+            python3 -m json.tool "$plugin/_conf_schema.json" > /dev/null
+            echo "✅ JSON valid for $plugin"
+          fi
+        done

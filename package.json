@@ -1,0 +1,30 @@
+{
+  "name": "astrbot-plugins-monorepo",
+  "version": "1.0.0",
+  "description": "Monorepo for AstrBot plugins maintained by MinaraAgent",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "update:all": "node scripts/update-all-plugins.js",
+    "lint": "eslint packages/**/*.js",
+    "format": "prettier --write \"**/*.{js,md,json}\"",
+    "check-deps": "node scripts/check-dependencies.js",
+    "release": "node scripts/release.js"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MinaraAgent/astrbot-plugins.git"
+  },
+  "author": "MinaraAgent",
+  "license": "MIT"
+}

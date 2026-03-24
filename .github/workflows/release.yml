@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'langfuse-v*'
+      - 'discord-forwarder-v*'
+      - 'group-geetest-verify-v*'
+      - 'video-vision-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Extract plugin and version
+      id: extract
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        PLUGIN=$(echo $TAG | cut -d'-' -f1)
+        VERSION=$(echo $TAG | cut -d'v' -f2)
+        echo "plugin=$PLUGIN" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ steps.extract.outputs.plugin }} ${{ steps.extract.outputs.version }}
+        body: |
+          Release of ${{ steps.extract.outputs.plugin }} version ${{ steps.extract.outputs.version }}
+
+          See the [CHANGELOG](https://github.com/MinaraAgent/astrbot-plugins/blob/main/packages/${{ steps.extract.outputs.plugin }}/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false

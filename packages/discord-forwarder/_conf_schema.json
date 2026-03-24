@@ -1,0 +1,123 @@
+{
+  "enabled": {
+    "type": "bool",
+    "description": "Enable or disable the message forwarder",
+    "default": true,
+    "hint": "Toggle message forwarding on/off"
+  },
+  "forward_rules": {
+    "description": "List of forwarding rules",
+    "type": "template_list",
+    "hint": "Configure multiple forwarding rules for different Discord bot instances. Click 'Add' to create a new rule.",
+    "templates": {
+      "default_rule": {
+        "name": "Forwarding Rule",
+        "hint": "Configure a Discord message forwarding rule",
+        "items": {
+          "platform_id": {
+            "description": "Discord platform ID",
+            "type": "string",
+            "default": "discord",
+            "hint": "The Discord platform ID in AstrBot (e.g., 'discord', 'discord-b')"
+          },
+          "source_channel_id": {
+            "description": "Source Discord Channel ID",
+            "type": "string",
+            "default": "",
+            "hint": "The Discord channel ID to forward messages FROM"
+          },
+          "destination_channel_id": {
+            "description": "Destination Discord Channel ID",
+            "type": "string",
+            "default": "",
+            "hint": "The Discord channel ID to forward messages TO"
+          },
+          "forward_images": {
+            "description": "Forward images",
+            "type": "bool",
+            "default": true,
+            "hint": "Include images from forwarded messages"
+          },
+          "forward_text": {
+            "description": "Forward text content",
+            "type": "bool",
+            "default": true,
+            "hint": "Include text content from forwarded messages"
+          },
+          "forward_files": {
+            "description": "Forward files (videos, documents, etc.)",
+            "type": "bool",
+            "default": true,
+            "hint": "Include file attachments (MP4, PDF, etc.) from forwarded messages"
+          },
+          "include_sender_info": {
+            "description": "Include sender information",
+            "type": "bool",
+            "default": true,
+            "hint": "Add sender name and ID to forwarded messages"
+          },
+          "ignore_bot_messages": {
+            "description": "Ignore messages from bots",
+            "type": "bool",
+            "default": true,
+            "hint": "Skip forwarding messages sent by Discord bots"
+          },
+          "enabled": {
+            "description": "Enable this rule",
+            "type": "bool",
+            "default": true,
+            "hint": "Toggle this specific forwarding rule on/off"
+          }
+        }
+      }
+    }
+  },
+  "forward_from_platform_id": {
+    "type": "string",
+    "description": "[Legacy] Discord platform ID to forward from",
+    "default": "discord",
+    "hint": "[Legacy] Use 'forward_rules' instead. The Discord platform ID to forward messages FROM."
+  },
+  "source_channel_id": {
+    "type": "string",
+    "description": "[Legacy] Source Discord Channel ID",
+    "default": "",
+    "hint": "[Legacy] Use 'forward_rules' instead. The Discord channel ID to forward messages FROM."
+  },
+  "destination_channel_id": {
+    "type": "string",
+    "description": "[Legacy] Destination Discord Channel ID",
+    "default": "",
+    "hint": "[Legacy] Use 'forward_rules' instead. The Discord channel ID to forward messages TO."
+  },
+  "forward_images": {
+    "type": "bool",
+    "description": "[Legacy] Forward images",
+    "default": true,
+    "hint": "[Legacy] Use 'forward_rules' instead. Include images from forwarded messages"
+  },
+  "forward_text": {
+    "type": "bool",
+    "description": "[Legacy] Forward text content",
+    "default": true,
+    "hint": "[Legacy] Use 'forward_rules' instead. Include text content from forwarded messages"
+  },
+  "forward_files": {
+    "type": "bool",
+    "description": "[Legacy] Forward files (videos, documents, etc.)",
+    "default": true,
+    "hint": "[Legacy] Use 'forward_rules' instead. Include file attachments from forwarded messages"
+  },
+  "include_sender_info": {
+    "type": "bool",
+    "description": "[Legacy] Include sender information",
+    "default": true,
+    "hint": "[Legacy] Use 'forward_rules' instead. Add sender name and ID to forwarded messages"
+  },
+  "ignore_bot_messages": {
+    "type": "bool",
+    "description": "[Legacy] Ignore messages from bots",
+    "default": true,
+    "hint": "[Legacy] Use 'forward_rules' instead. Skip forwarding messages sent by Discord bots"
+  }
+}
