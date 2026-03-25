@@ -400,10 +400,19 @@ class VideoVisionPlugin(Star):
             LLM analysis response or None if failed
         """
         try:
-            # Get the current chat provider
-            provider_id = await self.context.get_current_chat_provider_id(
-                event.unified_msg_origin
-            )
+            # Get the image caption provider configured in AstrBot settings
+            # This allows using a different model for image analysis than the main chat model
+            cfg = self.context.get_config(event.unified_msg_origin)
+            provider_id = cfg.get("provider_settings", {}).get("default_image_caption_provider_id", "")
+
+            # Fall back to the current chat provider if no image provider is configured
+            if not provider_id:
+                provider_id = await self.context.get_current_chat_provider_id(
+                    event.unified_msg_origin
+                )
+                logger.info("[VideoVision] No image caption provider configured, using chat provider")
+            else:
+                logger.info(f"[VideoVision] Using configured image caption provider: {provider_id}")
 
             if not provider_id:
                 logger.error("[VideoVision] No LLM provider configured")
