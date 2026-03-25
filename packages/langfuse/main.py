@@ -6,6 +6,7 @@ enabling tracing of LLM calls and message events.
 """
 
 import asyncio
+import base64
 import logging
 import os
 import sys
@@ -70,7 +71,6 @@ def log_both(level, msg):
             astrbot_logger.error(f"[Langfuse] {msg}")
     except Exception:
         pass
-    logger.info(f"[Langfuse] {msg}")
 
 # Log module load
 log_both("INFO", "=" * 60)
@@ -102,6 +102,65 @@ def _ensure_langfuse_imported():
     except ImportError as e:
         log_both("ERROR", f"langfuse package not available: {e}")
         return False
+
+
+# Helper functions for image encoding (matching AstrBot's behavior)
+async def _download_image_by_url(url: str) -> str:
+    """Download image from URL to temp file."""
+    import tempfile
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status != 200:
+                    log_both("WARNING", f"Failed to download image: HTTP {resp.status}")
+                    return ""
+                content = await resp.read()
+
+        # Create temp file with appropriate extension
+        suffix = ".jpg"
+        if ".png" in url.lower():
+            suffix = ".png"
+        elif ".webp" in url.lower():
+            suffix = ".webp"
+        elif ".gif" in url.lower():
+            suffix = ".gif"
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(content)
+            return f.name
+    except Exception as e:
+        log_both("WARNING", f"Failed to download image: {e}")
+        return ""
+
+
+async def _encode_image_bs64(image_path: str) -> str:
+    """Convert image to base64 data URL (matching AstrBot's behavior)."""
+    if image_path.startswith("base64://"):
+        return image_path.replace("base64://", "data:image/jpeg;base64,")
+
+    if image_path.startswith("data:"):
+        return image_path
+
+    try:
+        with open(image_path, "rb") as f:
+            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+
+        # Detect image type
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_type = "image/jpeg"
+        if ext == ".png":
+            mime_type = "image/png"
+        elif ext == ".webp":
+            mime_type = "image/webp"
+        elif ext == ".gif":
+            mime_type = "image/gif"
+
+        return f"data:{mime_type};base64,{image_bs64}"
+    except Exception as e:
+        log_both("WARNING", f"Failed to encode image: {e}")
+        return ""
 
 
 @dataclass
@@ -327,9 +386,9 @@ class LangfusePlugin(Star):
                 chatml_messages.append({"role": "system", "content": req.system_prompt})
 
             # Add conversation context (already in OpenAI/ChatML format)
+            # Include ALL contexts to match what AstrBot actually sends
             if req.contexts:
-                # Limit to avoid huge payloads but keep conversation flow
-                for ctx in req.contexts[:20]:
+                for ctx in req.contexts:
                     if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
                         chatml_messages.append({"role": ctx["role"], "content": ctx["content"]})
 
@@ -368,19 +427,58 @@ class LangfusePlugin(Star):
                 # Handle image URLs as multimodal content
                 if req.image_urls:
                     content_parts = [{"type": "text", "text": user_content}] if user_content else []
-                    for img_url in req.image_urls[:5]:  # Limit images
-                        content_parts.append({"type": "image_url", "image_url": {"url": img_url}})
+                    for img_url in req.image_urls:
+                        # Convert image to base64 like AstrBot does
+                        try:
+                            if img_url.startswith("http"):
+                                # Download and encode
+                                image_path = await _download_image_by_url(img_url)
+                                if image_path:
+                                    image_data = await _encode_image_bs64(image_path)
+                                    # Clean up temp file
+                                    try:
+                                        os.unlink(image_path)
+                                    except Exception:
+                                        pass
+                                else:
+                                    image_data = ""
+                            elif img_url.startswith("file:///"):
+                                image_path = img_url.replace("file:///", "")
+                                image_data = await _encode_image_bs64(image_path)
+                            else:
+                                image_data = await _encode_image_bs64(img_url)
+
+                            if image_data:
+                                content_parts.append({"type": "image_url", "image_url": {"url": image_data}})
+                        except Exception as e:
+                            log_both("WARNING", f"Failed to process image {img_url}: {e}")
                     chatml_messages.append({"role": "user", "content": content_parts})
                 else:
                     chatml_messages.append({"role": "user", "content": user_content})
 
-            # Use ChatML messages as input for playground compatibility
-            input_data = chatml_messages
-
-            # Check for tool call results in the request
+            # Add tool call results to match what AstrBot sends
             if req.tool_calls_result:
                 observation_metadata["has_tool_results"] = True
                 log_both("INFO", "Tool call results detected in request")
+                try:
+                    # Import ToolCallsResult type for type checking
+                    if hasattr(req.tool_calls_result, 'to_openai_messages'):
+                        # Single ToolCallsResult
+                        tool_messages = req.tool_calls_result.to_openai_messages()
+                        chatml_messages.extend(tool_messages)
+                        log_both("DEBUG", f"Added {len(tool_messages)} tool result messages")
+                    elif isinstance(req.tool_calls_result, list):
+                        # List of ToolCallsResult
+                        for tcr in req.tool_calls_result:
+                            if hasattr(tcr, 'to_openai_messages'):
+                                tool_messages = tcr.to_openai_messages()
+                                chatml_messages.extend(tool_messages)
+                                log_both("DEBUG", f"Added {len(tool_messages)} tool result messages from list")
+                except Exception as e:
+                    log_both("WARNING", f"Failed to add tool call results to trace: {e}")
+
+            # Use ChatML messages as input for playground compatibility
+            input_data = chatml_messages
 
             # Get model name
             model = req.model or "unknown"
