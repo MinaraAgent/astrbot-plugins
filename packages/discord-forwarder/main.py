@@ -200,13 +200,14 @@ class DiscordForwarderPlugin(Star):
             elif isinstance(component, Image) and rule.forward_images:
                 try:
                     if component.url:
-                        chain.image(url=component.url)
+                        # MessageChain doesn't have an image() method, so we append directly
+                        chain.chain.append(Image(url=component.url))
                         has_forwarded_content = True
                     elif component.path:
-                        chain.image(path=component.path)
+                        chain.chain.append(Image(path=component.path))
                         has_forwarded_content = True
                     elif component.file:
-                        chain.image(file=component.file)
+                        chain.chain.append(Image(file=component.file))
                         has_forwarded_content = True
                 except Exception as e:
                     logger.error(f"[DiscordForwarder] Error forwarding image: {e}")
