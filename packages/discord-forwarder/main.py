@@ -7,7 +7,7 @@ Supports text, images, files (including videos, documents, etc.), and other mess
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
@@ -36,8 +36,8 @@ class DiscordForwarderPlugin(Star):
     def __init__(self, context: Context, config: dict) -> None:
         super().__init__(context)
         self.config = config
-        self.enabled = config.get("enabled", True)
-        self.forward_rules: list[ForwardRule] = []
+        self.enabled: bool = config.get("enabled", True)
+        self.forward_rules: List[ForwardRule] = []
 
         # Load forwarding rules
         self._load_rules()
@@ -125,8 +125,17 @@ class DiscordForwarderPlugin(Star):
         session_id = event.session_id or ""
         unified_origin = event.unified_msg_origin or ""
 
+        logger.info(
+            "[DiscordForwarder] Matching rule for "
+            f"platform_id={platform_id}, session_id={session_id}, umo={unified_origin}"
+        )
+
         for rule in self.forward_rules:
             if not rule.enabled:
+                logger.info(
+                    "[DiscordForwarder] Skipping disabled rule: "
+                    f"platform={rule.platform_id}, source={rule.source_channel_id}"
+                )
                 continue
 
             # Check platform ID match
@@ -141,6 +150,10 @@ class DiscordForwarderPlugin(Star):
                 )
 
             if not platform_match:
+                logger.info(
+                    "[DiscordForwarder] Rule platform mismatch: "
+                    f"event={platform_id}, rule={rule.platform_id}"
+                )
                 continue
 
             # Check source channel match
@@ -151,7 +164,18 @@ class DiscordForwarderPlugin(Star):
             )
 
             if channel_match:
+                logger.info(
+                    "[DiscordForwarder] Rule matched: "
+                    f"platform={rule.platform_id}, source={rule.source_channel_id}, "
+                    f"dest={rule.destination_channel_id}"
+                )
                 return rule
+
+            logger.info(
+                "[DiscordForwarder] Rule channel mismatch: "
+                f"event_session={session_id}, event_umo={unified_origin}, "
+                f"rule_source={rule.source_channel_id}"
+            )
 
         return None
 
@@ -186,6 +210,10 @@ class DiscordForwarderPlugin(Star):
 
         if message_obj and hasattr(message_obj, "message"):
             components = message_obj.message or []
+
+        logger.info(
+            f"[DiscordForwarder] Building forwarded message from {len(components)} component(s)"
+        )
 
         has_forwarded_content = False
 
@@ -253,8 +281,13 @@ class DiscordForwarderPlugin(Star):
         if not has_forwarded_content and rule.forward_text:
             text = event.message_str or ""
             if text.strip():
+                logger.info("[DiscordForwarder] Using message_str fallback for forwarded text")
                 chain.message(text)
                 has_forwarded_content = True
+
+        logger.info(
+            f"[DiscordForwarder] Forwarded content built={has_forwarded_content}"
+        )
 
         return chain if has_forwarded_content else None
 
@@ -262,9 +295,18 @@ class DiscordForwarderPlugin(Star):
         """
         Handle all Discord messages and forward if matching a rule.
         This handler catches all Discord messages without requiring a command.
+        Called by the meta-plugin via _delegate_to_plugins.
         """
-        # Check if this is a Discord message (replicating @filter.platform_adapter_type)
-        if not event.platform_meta or event.platform_meta.adapter_type != filter.PlatformAdapterType.DISCORD:
+        logger.info("[DiscordForwarder] on_discord_message called!")
+        if event.get_extra("discord_forwarder_handled", False):
+            logger.info("[DiscordForwarder] Skipping duplicate on_discord_message invocation")
+            return
+
+        event.set_extra("discord_forwarder_handled", True)
+
+        # Check if this is a Discord message
+        if event.get_platform_name() != "discord":
+            logger.debug("[DiscordForwarder] Not a Discord message, skipping")
             return
 
         # Skip if plugin is disabled
@@ -274,6 +316,7 @@ class DiscordForwarderPlugin(Star):
         # Find matching rule
         rule = self._get_matching_rule(event)
         if not rule:
+            logger.info("[DiscordForwarder] No matching rule found")
             return
 
         # Skip bot messages if configured
@@ -286,7 +329,7 @@ class DiscordForwarderPlugin(Star):
             forward_chain = await self._build_forwarded_message(event, rule)
 
             if not forward_chain:
-                logger.debug("[DiscordForwarder] No content to forward")
+                logger.info("[DiscordForwarder] No content to forward")
                 return
 
             # Build destination session ID

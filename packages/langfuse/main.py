@@ -23,28 +23,20 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.api.star import Context, Star
 
-# Context variable for plugin metadata (shared with other plugins like VideoVision)
-# Plugins can set this before LLM calls to customize Langfuse observation names
-_langfuse_observation_ctx: ContextVar[Optional[dict]] = ContextVar('langfuse_observation')
+# Import shared context variable for inter-plugin communication
+from packages.shared import langfuse_observation_ctx
 
-# Try to get the context variable from VideoVision plugin if available
-try:
-    from astrbot_plugin_video_vision.main import langfuse_observation_ctx
-    # VideoVision plugin is loaded, use its context variable
-except ImportError:
-    # VideoVision not loaded, use our own
-    langfuse_observation_ctx = _langfuse_observation_ctx
-
-# Create a dedicated logger that writes to file for debugging
-DEBUG_LOG_FILE = "/tmp/astrbot_langfuse_debug.log"
-
-def setup_debug_logger():
+def setup_debug_logger(config: dict):
     """Setup a debug logger that writes to a file"""
     debug_logger = logging.getLogger("langfuse_plugin")
     debug_logger.setLevel(logging.DEBUG)
     debug_logger.handlers = []
+
+    # Get log file path from config or use default
+    debug_log_file = config.get("debug_log_file", "/tmp/astrbot_langfuse_debug.log")
+
     try:
-        file_handler = logging.FileHandler(DEBUG_LOG_FILE, mode='a')
+        file_handler = logging.FileHandler(debug_log_file, mode='a')
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter(
             '%(asctime)s [%(levelname)s] %(message)s',
@@ -54,9 +46,10 @@ def setup_debug_logger():
         debug_logger.addHandler(file_handler)
     except Exception:
         pass
-    return debug_logger
+    return debug_logger, debug_log_file
 
-debug_log = setup_debug_logger()
+# Module-level debug logger, will be properly initialized in __init__
+debug_log = None
 
 def log_both(level, msg):
     """Log to both AstrBot logger and debug file"""
@@ -69,15 +62,12 @@ def log_both(level, msg):
             astrbot_logger.warning(f"[Langfuse] {msg}")
         elif level == "ERROR":
             astrbot_logger.error(f"[Langfuse] {msg}")
+
+        # Also log to debug file if available
+        if debug_log is not None:
+            debug_log.log(getattr(logging, level, logging.INFO), msg)
     except Exception:
         pass
-
-# Log module load
-log_both("INFO", "=" * 60)
-log_both("INFO", "MODULE LOADED - astrbot_plugin_langfuse")
-log_both("INFO", f"Python version: {sys.version}")
-log_both("INFO", f"Debug log file: {DEBUG_LOG_FILE}")
-log_both("INFO", "=" * 60)
 
 # Lazy import
 Langfuse = None
@@ -185,6 +175,15 @@ class LangfusePlugin(Star):
         self.sessions: dict[str, SessionInfo] = {}
         self._cleanup_task: Optional[asyncio.Task] = None
 
+        # Setup debug logger with config
+        global debug_log
+        debug_log, self.debug_log_file = setup_debug_logger(self.plugin_config)
+
+        log_both("INFO", "=" * 60)
+        log_both("INFO", "MODULE LOADED - astrbot_plugin_langfuse")
+        log_both("INFO", f"Python version: {sys.version}")
+        log_both("INFO", f"Debug log file: {self.debug_log_file}")
+        log_both("INFO", "=" * 60)
         log_both("INFO", f"Config keys: {list(self.plugin_config.keys())}")
 
     async def initialize(self) -> None:
@@ -298,7 +297,7 @@ class LangfusePlugin(Star):
         if not self.enabled:
             yield event.plain_result(
                 f"Langfuse not enabled.\n"
-                f"Check logs: {DEBUG_LOG_FILE}"
+                f"Check logs: {self.debug_log_file}"
             )
             return
 
@@ -307,7 +306,8 @@ class LangfusePlugin(Star):
             f"Langfuse Status:\n"
             f"- Status: Enabled\n"
             f"- Base URL: {base_url}\n"
-            f"- Active Sessions: {len(self.sessions)}"
+            f"- Active Sessions: {len(self.sessions)}\n"
+            f"- Debug Log: {self.debug_log_file}"
         )
         yield event.plain_result(status_msg)
 

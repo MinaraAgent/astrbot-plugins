@@ -1,0 +1,2 @@
+- [x] a plugin group, manage all plugins of mine in one place
+- [x] why when i install the plugin in astrbot, the sub plugin astrbot_plugin_discord_forwarder will also be installed? it shouold be only install the main plugin, and the main plugin will manage the sub plugin, not let astrbot to manage the sub plugin

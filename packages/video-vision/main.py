@@ -23,8 +23,8 @@ from astrbot.api.message_components import File
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.agent.message import TextPart
 
-# Context variable to pass metadata through the call chain
-langfuse_observation_ctx: ContextVar[Optional[dict]] = ContextVar('langfuse_observation')
+# Import shared context variable for inter-plugin communication
+from packages.shared import langfuse_observation_ctx
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -452,12 +452,21 @@ class VideoVisionPlugin(Star):
         Marks the event as having videos that need processing before LLM request.
         """
         logger.info("[VideoVision] on_discord_message called!")
+        if event.get_extra("video_vision_handled", False):
+            logger.info("[VideoVision] Skipping duplicate on_discord_message invocation")
+            return
+
+        event.set_extra("video_vision_handled", True)
+
         # Check if this is a Discord message (replicating @filter.platform_adapter_type)
-        if not event.platform_meta or event.platform_meta.adapter_type != filter.PlatformAdapterType.DISCORD:
+        if event.get_platform_name() != "discord":
             logger.info("[VideoVision] Not a Discord message, skipping")
             return
 
-        logger.info(f"[VideoVision] Discord message confirmed, platform_meta={event.platform_meta}")
+        logger.info(
+            "[VideoVision] Discord message confirmed, "
+            f"platform_name={event.get_platform_name()}, platform_id={event.get_platform_id()}"
+        )
 
         # Check if plugin is enabled
         if not self.config.get("enabled", True):

@@ -1,6 +1,6 @@
 # AstrBot Plugins Monorepo
 
-A unified plugin distribution for [AstrBot](https://github.com/Soulter/AstrBot) maintained by [MinaraAgent](https://github.com/MinaraAgent).
+A unified plugin distribution for [AstrBot](https://github.com/Soulter/AstrBot)
 
 ## Overview
 

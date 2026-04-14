@@ -55,3 +55,5 @@ temp/
 
 # Build
 .cache/
+/debug/
+/data/

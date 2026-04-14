@@ -56,6 +56,12 @@
         "type": "string",
         "default": "production",
         "hint": "Environment name for traces (e.g., production, development)"
+      },
+      "debug_log_file": {
+        "description": "Debug Log File Path",
+        "type": "string",
+        "default": "/tmp/astrbot_langfuse_debug.log",
+        "hint": "Path to the debug log file for troubleshooting. Leave empty to disable file logging."
       }
     }
   },

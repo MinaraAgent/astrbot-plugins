@@ -45,7 +45,7 @@ SUB_PLUGINS = {
 
 
 @register(
-    "astrbot_plugins",
+    "astrbot-plugins",
     "Minara",
     "AstrBot Plugins Monorepo - Meta plugin that manages all sub-plugins",
     "1.0.0",
@@ -181,8 +181,10 @@ class AstrBotPluginsMeta(Star):
         Delegate a method call to all active sub-plugins that have the method.
         This is used for event handlers.
         """
+        logger.info(f"[AstrBotPlugins] _delegate_to_plugins called: method={method_name}, instances={list(self._sub_plugin_instances.keys())}")
         results = []
         for plugin_name, instance in self._sub_plugin_instances.items():
+            logger.info(f"[AstrBotPlugins] Checking {plugin_name} for method {method_name}: {hasattr(instance, method_name)}")
             if hasattr(instance, method_name):
                 method = getattr(instance, method_name)
                 try:
@@ -196,7 +198,21 @@ class AstrBotPluginsMeta(Star):
                     logger.error(
                         f"[AstrBotPlugins] Error in {plugin_name}.{method_name}: {e}"
                     )
+        logger.info(f"[AstrBotPlugins] Delegation returning {len(results)} results")
         return results
+
+    async def _run_delegated_tasks(self, method_name: str, *args, **kwargs) -> None:
+        """Run delegated sub-plugin tasks and swallow per-plugin exceptions."""
+        tasks = self._delegate_to_plugins(method_name, *args, **kwargs)
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(
+                f"[AstrBotPlugins] Delegation results for {method_name}: {results}"
+            )
+        else:
+            logger.info(
+                f"[AstrBotPlugins] No tasks returned from delegation for {method_name}"
+            )
 
     # Event handlers - delegate to sub-plugins
 
@@ -204,48 +220,32 @@ class AstrBotPluginsMeta(Star):
     async def on_discord_message(self, event: AstrMessageEvent):
         """Handle Discord messages - delegate to sub-plugins."""
         logger.info(f"[AstrBotPlugins] on_discord_message called, delegating to {len(self._sub_plugin_instances)} sub-plugins")
-        tasks = self._delegate_to_plugins("on_discord_message", event)
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            logger.info(f"[AstrBotPlugins] Delegation results: {results}")
-        else:
-            logger.info("[AstrBotPlugins] No tasks returned from delegation")
+        await self._run_delegated_tasks("on_discord_message", event)
 
     @filter.on_waiting_llm_request()
     async def on_waiting_llm_request(self, event: AstrMessageEvent):
         """Handle waiting LLM requests - delegate to sub-plugins."""
         logger.info(f"[AstrBotPlugins] on_waiting_llm_request called")
-        tasks = self._delegate_to_plugins("on_waiting_llm_request", event)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await self._run_delegated_tasks("on_waiting_llm_request", event)
 
     @filter.on_llm_request()
     async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
         """Handle LLM requests - delegate to sub-plugins."""
-        tasks = self._delegate_to_plugins("on_llm_request", event, req)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await self._run_delegated_tasks("on_llm_request", event, req)
 
     @filter.on_llm_response()
     async def on_llm_response(self, event: AstrMessageEvent, resp: LLMResponse):
         """Handle LLM responses - delegate to sub-plugins."""
-        tasks = self._delegate_to_plugins("on_llm_response", event, resp)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-    @filter.on_waiting_llm_request()
-    async def on_waiting_llm_request(self, event: AstrMessageEvent):
-        """Handle waiting LLM requests - delegate to sub-plugins."""
-        tasks = self._delegate_to_plugins("on_waiting_llm_request", event)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await self._run_delegated_tasks("on_llm_response", event, resp)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_all_messages(self, event: AstrMessageEvent):
-        """Handle all messages - delegate to sub-plugins."""
-        tasks = self._delegate_to_plugins("on_all_message", event)
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        """Handle all messages and fan out to generic or platform-specific sub-plugin listeners."""
+        platform_name = event.get_platform_name() if event.platform_meta else ""
+        if platform_name:
+            await self._run_delegated_tasks(f"on_{platform_name}_message", event)
+
+        await self._run_delegated_tasks("on_all_message", event)
 
     # Commands
 
